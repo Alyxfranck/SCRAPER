@@ -4,7 +4,7 @@ import pandas as pd
 import json
 import re
 
-file_path = 'contact_data.json'
+file_path = 'data.json'
 try:
     with open(file_path, 'r', encoding='utf-8') as file:
         data = json.load(file)
@@ -25,7 +25,7 @@ for entry in data:
     contact_info = [elem for elem in contact_info if elem]
     
 
-    label = company = street_address = postal_code = city = ""
+    company = street_address = postal_code = city = ""
     phones = []
     emails = []
     additional_info = []

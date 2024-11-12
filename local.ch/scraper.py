@@ -29,12 +29,16 @@ logger.addHandler(file_handler)
 SUBMIT_URL = "http://localhost/api/submit-scrape-job"
 STATUS_URL_TEMPLATE = "http://localhost/api/job/{}"
 AUTH_URL = "http://localhost/api/auth/token"  # Adjusted to the correct authentication endpoint
-MAX_RETRIES = 3
+MAX_RETRIES = 0
 RETRY_DELAY = 2
 
 # Variables
 output_data = []
 token = None
+
+# Helper function to parse the business name from the URL
+def parse_business_name(url):
+    return '-'.join(url.rstrip('/').split('/')[-1].split('-')[:-1]).replace('-', ' ').title()
 
 # Function to authenticate and retrieve the access token
 def authenticate():
@@ -60,7 +64,7 @@ def submit_scraping_job(url_to_scrape):
         "elements": [
             {
                 "name": "ContactSection",
-                "xpath": '//section[@id="contact" and contains(@class, "flex") and contains(@class, "flex-col")]',
+                "xpath": '//*[@id="page-content"]/div/div/section[3]/div/div[4]',
                 "url": url_to_scrape
             }
         ],
@@ -106,10 +110,7 @@ def check_job_status(job_id):
             job_info = response.json()
             logger.debug(f"Job info for ID {job_id}: {job_info}")
 
-            # Check if job_info is a dictionary or list
             if isinstance(job_info, list):
-                logger.error(f"Received a list instead of expected dictionary for Job ID {job_id}. Attempting to parse.")
-                # Attempt to extract status from the first item if list has elements
                 if job_info and isinstance(job_info[0], dict):
                     job_status = job_info[0].get("status")
                     result = job_info[0].get("result", [])
@@ -123,7 +124,6 @@ def check_job_status(job_id):
                 logger.error(f"Unexpected format for Job ID {job_id}: {type(job_info)}")
                 return None
             
-            # Check job status and return results if completed
             if job_status == "Completed":
                 logger.info(f"Job ID {job_id} completed.")
                 return result
@@ -138,12 +138,13 @@ def check_job_status(job_id):
         time.sleep(RETRY_DELAY)
 
 def process_result(result, url):
-    contact_text = "No text available"
+    contact_text = "No contact available"
+    business_name = parse_business_name(url)  # Extract business name from the URL
+    
     if result:
         if isinstance(result, list):
             for item in result:
                 if isinstance(item, dict):
-                    # Match URL keys regardless of trailing slash
                     for key in item.keys():
                         if key.rstrip('/') == url.rstrip('/'):
                             url_data = item[key]
@@ -151,36 +152,27 @@ def process_result(result, url):
                             if contact_section_data:
                                 first_element = contact_section_data[0]
                                 if isinstance(first_element, dict):
-                                    contact_text = first_element.get("text", "No text available")
+                                    contact_text = first_element.get("text", "No contact available")
                                 elif isinstance(first_element, str):
                                     contact_text = first_element
-                                else:
-                                    logger.warning(f"Unexpected data type for first_element: {type(first_element)}")
-                            else:
-                                logger.warning(f"No 'ContactSection' data found for {url}")
                             break
         elif isinstance(result, dict):
             contact_section = result.get("ContactSection", [])
             if contact_section:
                 first_element = contact_section[0]
                 if isinstance(first_element, dict):
-                    contact_text = first_element.get("text", "No text available")
+                    contact_text = first_element.get("text", "No contact available")
                 elif isinstance(first_element, str):
                     contact_text = first_element
-                else:
-                    logger.warning(f"Unexpected data type for first_element: {type(first_element)}")
-            else:
-                logger.warning(f"No 'ContactSection' data found for {url}")
-    else:
-        logger.warning(f"No contact info found for {url}")
 
-    # Append to output_data
+    # Append to output_data with parsed business name
     contact_info = {
         "url": url,
+        "business_name": business_name,
         "contact": contact_text
     }
     output_data.append(contact_info)
-    logger.info(f"Contact info saved for {url}")
+    logger.info(f"Data saved for {url}: {contact_info}")
 
 # Main execution logic
 try:
